@@ -148,7 +148,7 @@ def nilearn_atlas_helper(atlas, parc):
         if parc is False:
             atlas_fetch_obj = getattr(datasets, 'fetch_%s' % atlas, 'version')('prob')
         else:
-            atlas_fetch_obj = getattr(datasets, 'fetch_%s' % atlas, 'version')('det')
+            atlas_fetch_obj = getattr(datasets, 'fetch_%s' % atlas, 'version')('labels')
     elif 'atlas_talairach' in atlas:
         if atlas == 'atlas_talairach_lobe':
             atlas = 'atlas_talairach'
