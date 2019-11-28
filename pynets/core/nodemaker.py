@@ -96,13 +96,16 @@ def fetch_nilearn_atlas_coords(atlas):
     """
     from nilearn import datasets
     atlas = getattr(datasets, 'fetch_%s' % atlas)()
-    atlas_name = atlas['description'].splitlines()[0]
-    if atlas_name is None:
-        atlas_name = atlas
+    if 'description' in atlas.keys():
+        atlas_name = atlas['description'].splitlines()[0]
     if "b'" in str(atlas_name):
         atlas_name = atlas_name.decode('utf-8')
     print("%s%s%s%s" % ('\n', atlas_name, ' comes with {0}'.format(atlas.keys()), '\n'))
-    coords = np.vstack((atlas.rois['x'], atlas.rois['y'], atlas.rois['z'])).T
+    try:
+        coords = np.vstack((atlas.rois['x'], atlas.rois['y'], atlas.rois['z'])).T
+    except AttributeError:
+        raise AttributeError('\nERROR: No coords returned for specified atlas! Ensure an active internet connection.')
+
     print("%s%s" % ('\nStacked atlas coords in array of shape {0}.'.format(coords.shape), '\n'))
     try:
         networks_list = atlas.networks.astype('U').tolist()
@@ -112,9 +115,6 @@ def fetch_nilearn_atlas_coords(atlas):
         labels = np.array([s.strip('b\'') for s in atlas.labels.astype('U')]).tolist()
     except:
         labels = np.arange(len(coords) + 1)[np.arange(len(coords) + 1) != 0].tolist()
-
-    if len(coords) <= 1:
-        raise ValueError('\nERROR: No coords returned for specified atlas! Ensure an active internet connection.')
 
     return coords, atlas_name, networks_list, labels
 
