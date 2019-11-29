@@ -292,11 +292,8 @@ def get_node_membership(network, infile, coords, labels, parc, parcel_list, perc
         # Grab RSN reference file
         nets_ref_txt = pkg_resources.resource_filename("pynets", "rsnrefs/Schaefer2018_1000_7nets_ref.txt")
     else:
-        nets_ref_txt = None
-
-    if not nets_ref_txt:
-        raise ValueError("%s%s%s" % ('Network: ', str(network), ' not found!\nSee valid network names using the --help '
-                                                                'flag with pynets_run.py'))
+        raise ValueError("%s%s%s" % ('Network: ', str(network), ' not found!\n'
+                                     'See valid network names using the --help flag with pynets_run.py'))
 
     # Create membership dictionary
     dict_df = pd.read_csv(nets_ref_txt, sep="\t", header=None, names=["Index", "Region", "X", "Y", "Z"])
@@ -357,11 +354,9 @@ def get_node_membership(network, infile, coords, labels, parc, parcel_list, perc
             total_count = len(np.unique(np.where((parcel_vol.astype('uint8') == 1))))
 
             # Calculate % overlap
-            try:
-                overlap = float(overlap_count / total_count)
-            except RuntimeWarning:
+            overlap = float(overlap_count / total_count)
+            if overlap == 0:
                 print('\nWarning: No overlap with roi mask!\n')
-                overlap = float(0)
 
             if overlap >= perc_overlap:
                 print("%.2f%s%s%s%s%s" % (100 * overlap, '% of parcel ', labels[i], ' falls within ', str(network),
@@ -435,9 +430,8 @@ def parcel_masker(roi, coords, parcel_list, labels, dir_path, ID, perc_overlap):
         total_count = len(np.unique(np.where((parcel_vol.astype('uint8') == 1))))
 
         # Calculate % overlap
-        try:
-            overlap = float(overlap_count / total_count)
-        except:
+        overlap = float(overlap_count / total_count)
+        if overlap == 0:
             print("%s%s%s" % ('\nWarning: No overlap of parcel', labels[i], 'with roi mask!\n'))
             overlap = float(0)
 
