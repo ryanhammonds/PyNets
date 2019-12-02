@@ -6,6 +6,7 @@ Created on Wed Dec 27 16:19:14 2017
 @authors: Derek Pisner & Ryan Hammonds
 
 """
+import os.path as op
 import pytest
 import numpy as np
 import time
@@ -18,43 +19,87 @@ except ImportError:
     import _pickle as pickle
 
 
-@pytest.mark.parametrize("atlas", ['atlas_aal', 'atlas_talairach_gyrus', 'atlas_talairach_ba', 'atlas_talairach_lobe',
-                                   'atlas_harvard_oxford', 'atlas_destrieux_2009'])
-def test_nilearn_atlas_helper(atlas):
-    parc = False
+def test_get_sphere():
+    """
+    Test get_sphere functionality
+    """
+    base_dir = str(Path(__file__).parent/"examples")
+    dir_path = base_dir + '/002/dmri'
+    img_file = dir_path + '/nodif_b0_bet.nii.gz'
+    img = nib.load(img_file)
+    r = 4
+    vox_dims = (2.0, 2.0, 2.0)
+    coords_file = dir_path + '/DesikanKlein2012/Default_coords_rsn.pkl'
+    with open(coords_file, 'rb') as file_:
+        coords = pickle.load(file_)
+    neighbors = []
+    for coord in coords:
+        neighbors.append(nodemaker.get_sphere(coord, r, vox_dims, img.shape[0:3]))
+    neighbors = [i for i in neighbors if len(i)>0]
+    assert len(neighbors) == 4
+    
+
+@pytest.mark.parametrize("atlas,parc",
+    [
+        ('atlas_aal', False),
+        ('atlas_talairach_gyrus', False),
+        ('atlas_talairach_ba', False),
+        ('atlas_talairach_lobe', False),
+        ('atlas_harvard_oxford', False),
+        ('atlas_destrieux_2009', False),
+        ('atlas_pauli_2017', True),
+        ('atlas_pauli_2017', False),
+        ('coords_dosenbach_2010', False),
+        ('atlas_msdl', False),
+        (pytest.param('atlas_yeo_2011', False, marks=pytest.mark.xfail(raises=ValueError))),
+        (pytest.param('atlas_allen_2011', False, marks=pytest.mark.xfail(raises=ValueError)))
+    ]
+)
+def test_nilearn_atlas_helper(atlas, parc):
     [labels, networks_list, parlistfile] = nodemaker.nilearn_atlas_helper(atlas, parc)
-    print(labels)
-    print(networks_list)
-    print(parlistfile)
     assert labels is not None
 
 
-def test_nodemaker_tools_parlistfile_RSN():
+@pytest.mark.parametrize('network,file_exists',
+    [
+        ('Default', True),
+        ('DefaultA', True),
+        pytest.param('Default', False, marks=pytest.mark.xfail(raises=ValueError)),
+        pytest.param('Invalid', True, marks=pytest.mark.xfail(raises=ValueError))
+    ]
+)
+def test_nodemaker_tools_parlistfile_RSN(network, file_exists):
     """
     Test nodemaker_tools_parlistfile_RSN functionality
     """
     # Set example inputs
     base_dir = str(Path(__file__).parent/"examples")
     dir_path = base_dir + '/002/fmri'
+    atlas_dir = str(Path(__file__).parent.parent/"pynets/core/atlases")
     func_file = dir_path + '/002.nii.gz'
-    parlistfile = base_dir + '/whole_brain_cluster_labels_PCA200.nii.gz'
-    network = 'Default'
+
+    if not file_exists:
+        parlistfile = base_dir + '/false_file.nii.gz'
+        try:
+            nodemaker.get_names_and_coords_of_parcels(parlistfile)
+        except ValueError:
+            pass
+        nodemaker.get_names_and_coords_of_parcels(parlistfile)
+    else:
+        parlistfile = atlas_dir + '/whole_brain_cluster_labels_PCA200.nii.gz'
     parc = True
 
     start_time = time.time()
     [coords, _, _] = nodemaker.get_names_and_coords_of_parcels(parlistfile)
     print("%s%s%s" % ('get_names_and_coords_of_parcels --> finished: ',
                       str(np.round(time.time() - start_time, 1)), 's'))
-
     labels = np.arange(len(coords) + 1)[np.arange(len(coords) + 1) != 0].tolist()
 
     start_time = time.time()
-
     parcel_list = nodemaker.gen_img_list(parlistfile)
-
-    [net_coords, net_parcel_list, net_labels, network] = nodemaker.get_node_membership(network, func_file, coords,
-                                                                                            labels, parc,
-                                                                                            parcel_list)
+    [net_coords, net_parcel_list, net_labels, network] = \
+        nodemaker.get_node_membership(network, func_file, coords, labels, parc,
+                                      parcel_list)
     print("%s%s%s" % ('get_node_membership --> finished: ', str(np.round(time.time() - start_time, 1)), 's'))
 
     start_time = time.time()
@@ -75,18 +120,41 @@ def test_nodemaker_tools_parlistfile_RSN():
     assert network is not None
 
 
-@pytest.mark.parametrize("atlas", ['coords_dosenbach_2010', 'coords_power_2011'])
-def test_nodemaker_tools_nilearn_coords_RSN(atlas):
+@pytest.mark.parametrize("atlas,network,vox_dim",
+    [
+        ('coords_dosenbach_2010', 'Default', '2mm'),
+        pytest.param('coords_dosenbach_2010', 'Default', '1mm',
+                     marks=pytest.mark.xfail(raises=ValueError)),
+        ('coords_dosenbach_2010', 'DefaultA', '2mm'),
+        pytest.param('coords_dosenbach_2010', 'DefaultA', '1mm',
+                     marks=pytest.mark.xfail(raises=ValueError)),
+        ('coords_power_2011', 'Default', '2mm'),
+        pytest.param('atlas_yeo_2011', 'Default', '2mm',
+                     marks=pytest.mark.xfail(raises=AttributeError))
+    ]
+)
+def test_nodemaker_tools_nilearn_coords_RSN(atlas, network, vox_dim):
     """
     Test nodemaker_tools_nilearn_coords_RSN functionality
+
+    Note: Nilearn coords will fail when '1mm' is selected since the
+          coords are still in 2mm space. '1mm' artificially decreases
+          voxels size without resampling for faster computation.
     """
     # Set example inputs
     base_dir = str(Path(__file__).parent/"examples")
     dir_path = base_dir + '/002/fmri'
-    func_file = dir_path + '/002.nii.gz'
-    network = 'Default'
     parc = False
     parcel_list = None
+    func_file = dir_path + '/002.nii.gz'
+    if vox_dim == '1mm' and not op.isfile(dir_path + '/002_1mm.nii.gz'):
+        img_data = nib.load(func_file).get_data()
+        img_highres = nib.Nifti1Image(img_data, np.eye(4))
+        img_highres.to_filename(dir_path + '/002_1mm.nii.gz')
+        func_file = dir_path + '/002_1mm.nii.gz'
+    elif vox_dim == '1mm':
+        func_file = dir_path + '/002_1mm.nii.gz'
+
     start_time = time.time()
     [coords, _, _, labels] = nodemaker.fetch_nilearn_atlas_coords(atlas)
     print("%s%s%s" % ('fetch_nilearn_atlas_coords --> finished: ', str(np.round(time.time() - start_time, 1)), 's'))
@@ -459,27 +527,7 @@ def test_create_spherical_roi_volumes():
         coords = pickle.load(file_)
     [parcel_list, par_max, node_size, parc] = nodemaker.create_spherical_roi_volumes(node_size, coords, template_mask)
     assert len(parcel_list) > 0
-
-
-def test_get_sphere():
-    """
-    Test get_sphere functionality
-    """
-    base_dir = str(Path(__file__).parent/"examples")
-    dir_path = base_dir + '/002/dmri'
-    img_file = dir_path + '/nodif_b0_bet.nii.gz'
-    img = nib.load(img_file)
-    r = 4
-    vox_dims = (2.0, 2.0, 2.0)
-    coords_file = dir_path + '/DesikanKlein2012/Default_coords_rsn.pkl'
-    with open(coords_file, 'rb') as file_:
-        coords = pickle.load(file_)
-    neighbors = []
-    for coord in coords:
-        neighbors.append(nodemaker.get_sphere(coord, r, vox_dims, img.shape[0:3]))
-    neighbors = [i for i in neighbors if len(i)>0]
-    assert len(neighbors) == 4
-
+    
 
 def test_mask_roi():
     """
